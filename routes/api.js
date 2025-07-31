@@ -12,12 +12,10 @@ router.post('/validate', async(req, res) => {
 
     // 1. Basic format validation
     if (!matricNumber || !/^\d{9}$/.test(matricNumber)) {
-        return res
-            .status(400)
-            .json({
-                valid: false,
-                message: 'Invalid matriculation number format. It must be 9 digits.'
-            })
+        return res.status(400).json({
+            valid: false,
+            message: 'Invalid matriculation number format. It must be 9 digits.'
+        })
     }
 
     // 2. Extract and validate parts based on your rules
@@ -26,57 +24,45 @@ router.post('/validate', async(req, res) => {
     const department = parseInt(matricNumber.substring(4, 6), 10)
 
     if (year < 16 || year > 24) {
-        return res
-            .status(400)
-            .json({
-                valid: false,
-                message: 'This platform is for students admitted between 2016 and 2024.'
-            })
+        return res.status(400).json({
+            valid: false,
+            message: 'This platform is for students admitted between 2016 and 2024.'
+        })
     }
     if (faculty !== 4) {
-        return res
-            .status(400)
-            .json({
-                valid: false,
-                message: 'This matriculation number does not belong to the Faculty of Engineering.'
-            })
+        return res.status(400).json({
+            valid: false,
+            message: 'This matriculation number does not belong to the Faculty of Engineering.'
+        })
     }
     if (department < 1 || department > 10) {
-        return res
-            .status(400)
-            .json({
-                valid: false,
-                message: 'Invalid department code for the Faculty of Engineering.'
-            })
+        return res.status(400).json({
+            valid: false,
+            message: 'Invalid department code for the Faculty of Engineering.'
+        })
     }
 
     try {
         // 3. Check if this matric number has already voted
         const existingVoter = await Voter.findOne({ matricNumber: matricNumber })
         if (existingVoter) {
-            return res
-                .status(403)
-                .json({
-                    valid: false,
-                    message: 'This matriculation number has already been used to vote. Thank you!'
-                })
+            return res.status(403).json({
+                valid: false,
+                message: 'This matriculation number has already been used to vote. Thank you!'
+            })
         }
 
         // 4. If all checks pass, the user is valid
-        res
-            .status(200)
-            .json({
-                valid: true,
-                message: 'Validation successful. You can proceed to vote.'
-            })
+        res.status(200).json({
+            valid: true,
+            message: 'Validation successful. You can proceed to vote.'
+        })
     } catch (error) {
         console.error('Validation error:', error)
-        res
-            .status(500)
-            .json({
-                valid: false,
-                message: 'A server error occurred during validation.'
-            })
+        res.status(500).json({
+            valid: false,
+            message: 'A server error occurred during validation.'
+        })
     }
 })
 
@@ -93,11 +79,9 @@ router.post('/submit', async(req, res) => {
         !choices ||
         choices.length === 0
     ) {
-        return res
-            .status(400)
-            .json({
-                message: 'Invalid submission data. Please ensure all fields are correct.'
-            })
+        return res.status(400).json({
+            message: 'Invalid submission data. Please ensure all fields are correct.'
+        })
     }
     const year = parseInt(matricNumber.substring(0, 2), 10)
     const faculty = parseInt(matricNumber.substring(2, 4), 10)
@@ -141,18 +125,76 @@ router.post('/submit', async(req, res) => {
 
         // 5. SEND SUCCESS RESPONSE: Let the frontend know it worked.
         console.log(`Vote successfully recorded for matric number: ${matricNumber}`)
-        res
-            .status(201)
-            .json({
-                success: true,
-                message: 'Your vote has been successfully recorded. Thank you for participating!'
-            })
+        res.status(201).json({
+            success: true,
+            message: 'Your vote has been successfully recorded. Thank you for participating!'
+        })
     } catch (error) {
         // This will catch any database errors, including the unique index violation if a vote slips through.
         console.error('Vote submission error:', error)
         res
             .status(500)
             .json({ message: 'A server error occurred while submitting your vote.' })
+    }
+})
+
+// --- NEW --- ROUTE 3: Get Live Voting Results (Admin Only) ---
+router.post('/results', async(req, res) => {
+    // 1. SECURITY: Check for the admin password
+    const { password } = req.body
+    if (password !== process.env.ADMIN_PASSWORD) {
+        return res.status(401).json({ message: 'Unauthorized: Invalid password.' })
+    }
+
+    try {
+        // 2. MONGODB AGGREGATION: This is a powerful way to process data in the database.
+        const results = await Vote.aggregate([
+            // Stage 1: Deconstruct the 'choices' array into separate documents
+            // E.g., a vote with 3 choices becomes 3 separate documents
+            { $unwind: '$choices' },
+
+            // Stage 2: Group the documents by category and nominee, and count them
+            // This counts how many times each nominee appears in each category
+            {
+                $group: {
+                    _id: {
+                        categoryId: '$choices.categoryId',
+                        nomineeName: '$choices.nomineeName'
+                    },
+                    votes: { $sum: 1 }
+                }
+            },
+
+            // Stage 3: Re-group the results by category
+            // This structures the data nicely for the frontend charts
+            {
+                $group: {
+                    _id: '$_id.categoryId',
+                    nominees: {
+                        $push: {
+                            name: '$_id.nomineeName',
+                            votes: '$votes'
+                        }
+                    }
+                }
+            },
+
+            // Stage 4: Rename '_id' to 'category' for a cleaner output
+            {
+                $project: {
+                    _id: 0,
+                    category: '$_id',
+                    nominees: '$nominees'
+                }
+            }
+        ])
+
+        res.status(200).json(results)
+    } catch (error) {
+        console.error('Error fetching results:', error)
+        res
+            .status(500)
+            .json({ message: 'A server error occurred while fetching results.' })
     }
 })
 
