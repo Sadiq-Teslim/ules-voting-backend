@@ -1,0 +1,159 @@
+// routes/api.js
+
+const express = require('express')
+const router = express.Router()
+const Voter = require('../models/Voter')
+const Vote = require('../models/Vote')
+
+// --- ROUTE 1: Validate Matriculation Number ---
+// This remains the same. It's the first check before the user sees the voting page.
+router.post('/validate', async(req, res) => {
+    const { matricNumber } = req.body
+
+    // 1. Basic format validation
+    if (!matricNumber || !/^\d{9}$/.test(matricNumber)) {
+        return res
+            .status(400)
+            .json({
+                valid: false,
+                message: 'Invalid matriculation number format. It must be 9 digits.'
+            })
+    }
+
+    // 2. Extract and validate parts based on your rules
+    const year = parseInt(matricNumber.substring(0, 2), 10)
+    const faculty = parseInt(matricNumber.substring(2, 4), 10)
+    const department = parseInt(matricNumber.substring(4, 6), 10)
+
+    if (year < 16 || year > 24) {
+        return res
+            .status(400)
+            .json({
+                valid: false,
+                message: 'This platform is for students admitted between 2016 and 2024.'
+            })
+    }
+    if (faculty !== 4) {
+        return res
+            .status(400)
+            .json({
+                valid: false,
+                message: 'This matriculation number does not belong to the Faculty of Engineering.'
+            })
+    }
+    if (department < 1 || department > 10) {
+        return res
+            .status(400)
+            .json({
+                valid: false,
+                message: 'Invalid department code for the Faculty of Engineering.'
+            })
+    }
+
+    try {
+        // 3. Check if this matric number has already voted
+        const existingVoter = await Voter.findOne({ matricNumber: matricNumber })
+        if (existingVoter) {
+            return res
+                .status(403)
+                .json({
+                    valid: false,
+                    message: 'This matriculation number has already been used to vote. Thank you!'
+                })
+        }
+
+        // 4. If all checks pass, the user is valid
+        res
+            .status(200)
+            .json({
+                valid: true,
+                message: 'Validation successful. You can proceed to vote.'
+            })
+    } catch (error) {
+        console.error('Validation error:', error)
+        res
+            .status(500)
+            .json({
+                valid: false,
+                message: 'A server error occurred during validation.'
+            })
+    }
+})
+
+// --- NEW --- ROUTE 2: Submit a Completed Vote ---
+// This is the endpoint your frontend will call when the user clicks the final "Complete Vote" button.
+router.post('/submit', async(req, res) => {
+    const { fullName, matricNumber, choices } = req.body
+
+    // 1. SECURITY: Re-run all validation logic on the server side.
+    // This ensures no one can bypass the frontend validation.
+    if (!matricNumber ||
+        !/^\d{9}$/.test(matricNumber) ||
+        !fullName ||
+        !choices ||
+        choices.length === 0
+    ) {
+        return res
+            .status(400)
+            .json({
+                message: 'Invalid submission data. Please ensure all fields are correct.'
+            })
+    }
+    const year = parseInt(matricNumber.substring(0, 2), 10)
+    const faculty = parseInt(matricNumber.substring(2, 4), 10)
+    const department = parseInt(matricNumber.substring(4, 6), 10)
+    if (
+        year < 16 ||
+        year > 24 ||
+        faculty !== 4 ||
+        department < 1 ||
+        department > 10
+    ) {
+        return res
+            .status(400)
+            .json({ message: 'Matriculation number is not valid for this election.' })
+    }
+
+    try {
+        // 2. SECURITY: Check one last time if the matric number has been used.
+        // This prevents race conditions (e.g., user submitting from two tabs at once).
+        const existingVoter = await Voter.findOne({ matricNumber })
+        if (existingVoter) {
+            return res
+                .status(403)
+                .json({ message: 'This matriculation number has already voted.' })
+        }
+
+        // 3. SAVE THE VOTE: If validation passes, save the vote details.
+        const newVote = new Vote({
+            voterMatric: matricNumber,
+            choices: choices // The array of selections from the frontend
+        })
+        await newVote.save()
+
+        // 4. "BURN" THE MATRIC NUMBER: After the vote is successfully saved,
+        // record the voter to prevent them from voting again.
+        const newVoter = new Voter({
+            matricNumber: matricNumber,
+            fullName: fullName
+        })
+        await newVoter.save()
+
+        // 5. SEND SUCCESS RESPONSE: Let the frontend know it worked.
+        console.log(`Vote successfully recorded for matric number: ${matricNumber}`)
+        res
+            .status(201)
+            .json({
+                success: true,
+                message: 'Your vote has been successfully recorded. Thank you for participating!'
+            })
+    } catch (error) {
+        // This will catch any database errors, including the unique index violation if a vote slips through.
+        console.error('Vote submission error:', error)
+        res
+            .status(500)
+            .json({ message: 'A server error occurred while submitting your vote.' })
+    }
+})
+
+module.exports = router
