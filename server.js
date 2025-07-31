@@ -11,22 +11,23 @@ const apiRoutes = require('./routes/api');
 
 const app = express();
 
-// --- CORS CONFIGURATION FOR PRODUCTION ---
-// Define the list of allowed origins (your frontend URLs)
+// --- PRODUCTION-READY CORS CONFIGURATION ---
+// Define the list of origins that are allowed to connect to this backend.
 const allowedOrigins = [
-  'https://ules-vote.netlify.app', // Your live frontend
-  'http://localhost:5173'         // Your local development frontend
+  'https://ules-vote.netlify.app', // Your live frontend URL
+  'http://localhost:5173'         // Your local development frontend URL
 ];
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
+    // Check if the incoming request's origin is in our list of allowed origins.
+    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+      // If it is, allow the request.
+      callback(null, true);
+    } else {
+      // If it's not, block the request.
+      callback(new Error('Not allowed by CORS'));
     }
-    return callback(null, true);
   }
 };
 
