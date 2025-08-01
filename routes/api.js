@@ -198,4 +198,36 @@ router.post('/results', async(req, res) => {
     }
 })
 
+// --- ROUTE 4: Reset Votes for a Specific Category (Admin Only) ---
+router.post('/reset-category', async(req, res) => {
+    const { password, categoryId } = req.body;
+
+    // 1. SECURITY: Check admin password
+    if (password !== process.env.ADMIN_PASSWORD) {
+        return res.status(403).json({ message: 'Invalid admin password.' });
+    }
+
+    if (!categoryId) {
+        return res.status(400).json({ message: 'Category ID is required.' });
+    }
+
+    try {
+        // 2. Delete all votes that contain a choice for the specified category
+        const result = await Vote.deleteMany({
+            'choices.categoryId': categoryId
+        });
+
+        // 3. IMPORTANT: We also need to find all voters who ONLY voted for this category
+        // and might need to be re-enabled. For simplicity in this version, we will
+        // not re-enable voters, assuming they voted in other categories.
+        // A more complex system could handle re-enabling voters.
+
+        console.log(`Votes for category '${categoryId}' have been reset. Count: ${result.deletedCount}`);
+        res.status(200).json({ success: true, message: `Successfully reset ${result.deletedCount} votes for category ${categoryId}.` });
+
+    } catch (error) {
+        console.error('Error resetting category votes:', error);
+        res.status(500).json({ message: 'A server error occurred while resetting votes.' });
+    }
+});
 module.exports = router
