@@ -4,6 +4,7 @@ const express = require('express')
 const router = express.Router()
 const Voter = require('../models/Voter')
 const Vote = require('../models/Vote')
+const Nomination = require('../models/Nomination');
 
 // --- ROUTE 1: Validate Matriculation Number ---
 // This remains the same. It's the first check before the user sees the voting page.
@@ -230,4 +231,37 @@ router.post('/reset-category', async(req, res) => {
         res.status(500).json({ message: 'A server error occurred while resetting votes.' });
     }
 });
+
+// --- NEW ROUTE: Submit a Nomination ---
+router.post('/nominate', async(req, res) => {
+    const { fullName, matricNumber, category, imageUrl, description } = req.body;
+
+    if (!fullName || !matricNumber || !category || !imageUrl) {
+        return res.status(400).json({ message: 'All required fields must be filled.' });
+    }
+
+    try {
+        // Optional: Check if this matric number has already submitted a nomination
+        const existingNomination = await Nomination.findOne({ matricNumber });
+        if (existingNomination) {
+            return res.status(409).json({ message: 'This matriculation number has already been used for a nomination.' });
+        }
+
+        const newNomination = new Nomination({
+            fullName,
+            matricNumber,
+            category,
+            imageUrl,
+            description,
+        });
+
+        await newNomination.save();
+        res.status(201).json({ success: true, message: 'Your nomination has been successfully submitted for review!' });
+
+    } catch (error) {
+        console.error('Nomination submission error:', error);
+        res.status(500).json({ message: 'A server error occurred.' });
+    }
+});
+
 module.exports = router
