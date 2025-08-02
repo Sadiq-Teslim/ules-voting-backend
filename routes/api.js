@@ -302,14 +302,31 @@ router.post('/delete-nominations', async(req, res) => {
         return res.status(403).json({ message: 'Invalid admin password.' })
     try {
         const result = await Nomination.deleteMany({})
-        res
-            .status(200)
-            .json({
-                success: true,
-                message: `${result.deletedCount} nominations have been deleted.`
-            })
+        res.status(200).json({
+            success: true,
+            message: `${result.deletedCount} nominations have been deleted.`
+        })
     } catch (error) {
         res.status(500).json({ message: 'Server error.' })
+    }
+})
+
+// --- ADMIN ROUTE: Fetch Pending Nominations ---
+router.post('/pending-nominations', async(req, res) => {
+    // 1. SECURITY: Check the admin password
+    if (req.body.password !== process.env.ADMIN_PASSWORD) {
+        return res.status(403).json({ message: 'Invalid admin password.' })
+    }
+
+    try {
+        // 2. Find all nominations that still have the 'pending' status
+        const pending = await Nomination.find({ status: 'pending' }).sort({
+            submittedAt: -1
+        })
+        res.status(200).json(pending)
+    } catch (error) {
+        console.error('Error fetching pending nominations:', error)
+        res.status(500).json({ message: 'Error fetching pending nominations.' })
     }
 })
 module.exports = router
