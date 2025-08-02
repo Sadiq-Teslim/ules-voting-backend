@@ -1,12 +1,15 @@
-const mongoose = require('mongoose')
+const mongoose = require('mongoose');
 
 const SettingSchema = new mongoose.Schema({
-    key: { type: String, required: true, unique: true },
-    value: { type: String, required: true }
-})
+    key: {
+        type: String,
+        required: true,
+        unique: true, // e.g., 'electionStatus'
+    },
+    value: {
+        type: String,
+        required: true, // e.g., 'open' or 'closed'
+    },
+});
 
-module.exports = mongoose.model('Setting', SettingSchema)
-    // This model will store the current status of the election. 
-    // It will have a key 'electionStatus' and possible values: 'open', 'closed'.
-    // When the election is open, voters can cast their votes.
-    // When it's closed, voting is no longer allowed.
+module.exports = mongoose.model('Setting', SettingSchema);
