@@ -320,13 +320,18 @@ router.post('/pending-nominations', async(req, res) => {
 
     try {
         // 2. Find all nominations that still have the 'pending' status
-        const pending = await Nomination.find({ status: 'pending' }).sort({
-            submittedAt: -1
-        })
-        res.status(200).json(pending)
+        const pending = await Nomination.find({
+            $or: [
+                { status: 'pending' },
+                { status: { $exists: false } }
+            ]
+        }).sort({ submittedAt: -1 });
+
+        res.status(200).json(pending);
+
     } catch (error) {
-        console.error('Error fetching pending nominations:', error)
-        res.status(500).json({ message: 'Error fetching pending nominations.' })
+        console.error('Error fetching pending nominations:', error);
+        res.status(500).json({ message: 'Error fetching pending nominations.' });
     }
-})
+});
 module.exports = router
