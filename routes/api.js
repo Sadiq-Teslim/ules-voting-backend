@@ -4,7 +4,8 @@ const express = require('express')
 const router = express.Router()
 const Voter = require('../models/Voter')
 const Vote = require('../models/Vote')
-const Nomination = require('../models/Nomination');
+const Nomination = require('../models/Nomination')
+const Setting = require('../models/Setting')
 
 // --- ROUTE 1: Validate Matriculation Number ---
 // This remains the same. It's the first check before the user sees the voting page.
@@ -201,67 +202,114 @@ router.post('/results', async(req, res) => {
 
 // --- ROUTE 4: Reset Votes for a Specific Category (Admin Only) ---
 router.post('/reset-category', async(req, res) => {
-    const { password, categoryId } = req.body;
+    const { password, categoryId } = req.body
 
     // 1. SECURITY: Check admin password
     if (password !== process.env.ADMIN_PASSWORD) {
-        return res.status(403).json({ message: 'Invalid admin password.' });
+        return res.status(403).json({ message: 'Invalid admin password.' })
     }
 
     if (!categoryId) {
-        return res.status(400).json({ message: 'Category ID is required.' });
+        return res.status(400).json({ message: 'Category ID is required.' })
     }
 
     try {
         // 2. Delete all votes that contain a choice for the specified category
         const result = await Vote.deleteMany({
             'choices.categoryId': categoryId
-        });
+        })
 
         // 3. IMPORTANT: We also need to find all voters who ONLY voted for this category
         // and might need to be re-enabled. For simplicity in this version, we will
         // not re-enable voters, assuming they voted in other categories.
         // A more complex system could handle re-enabling voters.
 
-        console.log(`Votes for category '${categoryId}' have been reset. Count: ${result.deletedCount}`);
-        res.status(200).json({ success: true, message: `Successfully reset ${result.deletedCount} votes for category ${categoryId}.` });
-
+        console.log(
+            `Votes for category '${categoryId}' have been reset. Count: ${result.deletedCount}`
+        )
+        res.status(200).json({
+            success: true,
+            message: `Successfully reset ${result.deletedCount} votes for category ${categoryId}.`
+        })
     } catch (error) {
-        console.error('Error resetting category votes:', error);
-        res.status(500).json({ message: 'A server error occurred while resetting votes.' });
+        console.error('Error resetting category votes:', error)
+        res
+            .status(500)
+            .json({ message: 'A server error occurred while resetting votes.' })
     }
-});
+})
 
 // --- NEW ROUTE: Submit a Nomination ---
 router.post('/nominate', async(req, res) => {
-    const { fullName, matricNumber, category, imageUrl, description } = req.body;
+    // Note: We are now receiving an array of nominations
+    const nominations = req.body.nominations
 
-    if (!fullName || !matricNumber || !category || !imageUrl) {
-        return res.status(400).json({ message: 'All required fields must be filled.' });
+    if (!nominations || !Array.isArray(nominations) || nominations.length === 0) {
+        return res
+            .status(400)
+            .json({ message: 'Nomination data is missing or invalid.' })
     }
 
     try {
-        // Optional: Check if this matric number has already submitted a nomination
-        const existingNomination = await Nomination.findOne({ matricNumber });
-        if (existingNomination) {
-            return res.status(409).json({ message: 'This matriculation number has already been used for a nomination.' });
-        }
+        // We can optionally add more validation here if needed
 
-        const newNomination = new Nomination({
-            fullName,
-            matricNumber,
-            category,
-            imageUrl,
-            description,
-        });
+        // Use insertMany for efficiency, as we're receiving an array
+        await Nomination.insertMany(nominations)
 
-        await newNomination.save();
-        res.status(201).json({ success: true, message: 'Your nomination has been successfully submitted for review!' });
-
+        res.status(201).json({
+            success: true,
+            message: 'Your nomination(s) have been successfully submitted for review!'
+        })
     } catch (error) {
-        console.error('Nomination submission error:', error);
-        res.status(500).json({ message: 'A server error occurred.' });
+        console.error('Nomination submission error:', error)
+        res
+            .status(500)
+            .json({ message: 'A server error occurred while submitting.' })
     }
-});
+})
 
+router.get('/election-status', async(req, res) => {
+    try {
+        const setting = await Setting.findOne({ key: 'electionStatus' })
+        res.status(200).json({ status: setting ? setting.value : 'closed' })
+    } catch (error) {
+        res.status(500).json({ message: 'Server error.' })
+    }
+})
+
+// Toggle the election status (open/close)
+router.post('/toggle-election', async(req, res) => {
+    if (req.body.password !== process.env.ADMIN_PASSWORD)
+        return res.status(403).json({ message: 'Invalid admin password.' })
+    try {
+        let setting = await Setting.findOne({ key: 'electionStatus' })
+        if (setting) {
+            setting.value = setting.value === 'open' ? 'closed' : 'open'
+            await setting.save()
+        } else {
+            setting = new Setting({ key: 'electionStatus', value: 'open' })
+            await setting.save()
+        }
+        res.status(200).json({ success: true, newStatus: setting.value })
+    } catch (error) {
+        res.status(500).json({ message: 'Server error.' })
+    }
+})
+
+// Delete all nominations
+router.post('/delete-nominations', async(req, res) => {
+    if (req.body.password !== process.env.ADMIN_PASSWORD)
+        return res.status(403).json({ message: 'Invalid admin password.' })
+    try {
+        const result = await Nomination.deleteMany({})
+        res
+            .status(200)
+            .json({
+                success: true,
+                message: `${result.deletedCount} nominations have been deleted.`
+            })
+    } catch (error) {
+        res.status(500).json({ message: 'Server error.' })
+    }
+})
 module.exports = router
