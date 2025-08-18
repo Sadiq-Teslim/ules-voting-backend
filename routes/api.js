@@ -1,5 +1,3 @@
-// routes/api.js
-
 const express = require('express')
 const router = express.Router()
 const Voter = require('../models/Voter')
@@ -7,64 +5,86 @@ const Vote = require('../models/Vote')
 const Nomination = require('../models/Nomination')
 const Setting = require('../models/Setting')
 
-// --- ROUTE 1: Validate Matriculation Number (UPDATED LOGIC) ---
+// --- CORRECTED & FINAL Department Code to ID Mapping ---
+const departmentMap = {
+    '01': 'dept-chemical',
+    '02': 'dept-civil',
+    '03': 'dept-electrical-electronics',
+    '04': 'dept-mechanical',
+    '05': 'dept-surveying-geoinformatics',
+    '06': 'dept-metallurgical-materials',
+    '07': 'dept-systems',
+    '08': 'dept-computer',
+    '09': 'dept-petroleum-gas',
+    10: 'dept-biomedical'
+}
+
+// --- ROUTE 1: Validate Matriculation Number ---
+// This is the gatekeeper. It validates the number's structure and returns the user's specific departmentId.
 router.post('/validate', async(req, res) => {
     const { matricNumber } = req.body
 
-    // Format validation remains the same
-    if (!matricNumber || !/^\d{9}$/.test(matricNumber))
+    // Step 1: Basic format validation
+    if (!matricNumber || !/^\d{9}$/.test(matricNumber)) {
         return res
             .status(400)
             .json({ valid: false, message: 'Invalid matriculation number format.' })
+    }
+
+    // Step 2: Extract parts for validation
     const year = parseInt(matricNumber.substring(0, 2), 10)
     const faculty = parseInt(matricNumber.substring(2, 4), 10)
-    const department = parseInt(matricNumber.substring(4, 6), 10)
-    if (year < 16 || year > 24)
-        return res.status(400).json({
-            valid: false,
-            message: 'This platform is for students admitted between 2016 and 2024.'
-        })
-    if (faculty !== 4)
-        return res.status(400).json({
-            valid: false,
-            message: 'This does not belong to the Faculty of Engineering.'
-        })
-    if (department < 1 || department > 10)
-        return res.status(400).json({
-            valid: false,
-            message: 'Invalid department code for Engineering.'
-        })
+    const departmentCodeStr = matricNumber.substring(4, 6) // Keep as a string '0X' for the map key
+    const departmentCode = parseInt(departmentCodeStr, 10)
 
-    // CRITICAL CHANGE: We REMOVE the check that blocks existing voters.
-    // A user can always log in to see their progress or vote in other sub-categories.
+    // Step 3: Check rules
+    if (year < 16 || year > 24) {
+        return res
+            .status(400)
+            .json({
+                valid: false,
+                message: 'This platform is for students admitted between 2016 and 2024.'
+            })
+    }
+    if (faculty !== 4) {
+        return res
+            .status(400)
+            .json({
+                valid: false,
+                message: 'This does not belong to the Faculty of Engineering.'
+            })
+    }
+    if (departmentCode < 1 || departmentCode > 10) {
+        return res
+            .status(400)
+            .json({
+                valid: false,
+                message: 'Invalid department code for Engineering.'
+            })
+    }
+
+    // Step 4: Find the specific department ID using the map
+    const departmentId = departmentMap[departmentCodeStr]
+    if (!departmentId) {
+        // Safety net in case of an invalid department code that somehow passed the checks
+        return res
+            .status(500)
+            .json({
+                valid: false,
+                message: 'Could not resolve department. Please contact support.'
+            })
+    }
+
+    // A user can always log in if their matric is valid. The UI will show their progress.
     res.status(200).json({
         valid: true,
-        message: 'Validation successful. You can proceed to vote.'
+        message: 'Validation successful. You can proceed to vote.',
+        departmentId: departmentId // Send the crucial departmentId to the frontend
     })
 })
 
-// --- ROUTE: Get a voter's status (UPDATED LOGIC) ---
-router.post('/voter-status', async(req, res) => {
-    const { matricNumber } = req.body
-    if (!matricNumber)
-        return res
-            .status(400)
-            .json({ message: 'Matriculation number is required.' })
-
-    try {
-        const voter = await Voter.findOne({ matricNumber })
-            // Return the new array of voted sub-category IDs
-        res
-            .status(200)
-            .json({ votedSubCategoryIds: voter ? voter.votedSubCategoryIds : [] })
-    } catch (error) {
-        res
-            .status(500)
-            .json({ message: 'Server error while fetching voter status.' })
-    }
-})
-
-// --- ROUTE: Get a voter's status and previously voted categories ---
+// --- ROUTE 2: Get a voter's status ---
+// Fetches the list of individual sub-categories the user has already voted for.
 router.post('/voter-status', async(req, res) => {
     const { matricNumber } = req.body
     if (!matricNumber) {
@@ -76,7 +96,7 @@ router.post('/voter-status', async(req, res) => {
         const voter = await Voter.findOne({ matricNumber })
         res
             .status(200)
-            .json({ votedCategories: voter ? voter.votedCategories : [] })
+            .json({ votedSubCategoryIds: voter ? voter.votedSubCategoryIds : [] })
     } catch (error) {
         res
             .status(500)
@@ -84,7 +104,8 @@ router.post('/voter-status', async(req, res) => {
     }
 })
 
-// --- ROUTE: Submit votes for a single main category ---
+// --- ROUTE 3: Submit votes ---
+// Accepts votes for one or more sub-categories and records them.
 router.post('/submit', async(req, res) => {
     const { fullName, matricNumber, choices, mainCategory } = req.body
     if (!matricNumber ||
@@ -102,7 +123,6 @@ router.post('/submit', async(req, res) => {
             voter = new Voter({ matricNumber, fullName, votedSubCategoryIds: [] })
         }
 
-        // CRITICAL CHANGE: Check if any of the INCOMING sub-category IDs have already been voted for.
         const incomingSubCategoryIds = choices.map(choice => choice.categoryId)
         const hasAlreadyVotedForOne = incomingSubCategoryIds.some(id =>
             voter.votedSubCategoryIds.includes(id)
@@ -116,19 +136,17 @@ router.post('/submit', async(req, res) => {
                 })
         }
 
-        // If validation passes, save the vote document (this is unchanged)
         if (choices.length > 0) {
             await new Vote({ voterMatric: matricNumber, choices }).save()
         }
 
-        // CRITICAL CHANGE: Add the new sub-category IDs to the voter's record.
         voter.votedSubCategoryIds.push(...incomingSubCategoryIds)
         await voter.save()
 
         res.status(201).json({
             success: true,
             message: `Your votes for the ${mainCategory} category have been recorded!`,
-            votedSubCategoryIds: voter.votedSubCategoryIds // Return the updated list
+            votedSubCategoryIds: voter.votedSubCategoryIds
         })
     } catch (error) {
         console.error('Vote submission error:', error)
@@ -138,7 +156,7 @@ router.post('/submit', async(req, res) => {
     }
 })
 
-// --- ADMIN AND OTHER ROUTES (No changes needed) ---
+// --- ADMIN AND NOMINATION ROUTES (Unaffected by voting logic changes) ---
 
 // Get Live Voting Results (Admin Only)
 router.post('/results', async(req, res) => {
@@ -183,10 +201,12 @@ router.post('/nominate', async(req, res) => {
     }
     try {
         await Nomination.insertMany(nominations)
-        res.status(201).json({
-            success: true,
-            message: 'Your nomination(s) have been submitted for review!'
-        })
+        res
+            .status(201)
+            .json({
+                success: true,
+                message: 'Your nomination(s) have been submitted for review!'
+            })
     } catch (error) {
         res
             .status(500)
@@ -237,10 +257,12 @@ router.post('/delete-nominations', async(req, res) => {
         return res.status(403).json({ message: 'Invalid admin password.' })
     try {
         const { deletedCount } = await Nomination.deleteMany({})
-        res.status(200).json({
-            success: true,
-            message: `${deletedCount} nominations have been deleted.`
-        })
+        res
+            .status(200)
+            .json({
+                success: true,
+                message: `${deletedCount} nominations have been deleted.`
+            })
     } catch (error) {
         res.status(500).json({ message: 'Server error.' })
     }
