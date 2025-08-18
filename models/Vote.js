@@ -1,20 +1,23 @@
-const mongoose = require('mongoose');
+// models/Vote.js
 
-const VoteSchema = new mongoose.Schema({
+const mongoose = require('mongoose')
+
+const voteSchema = new mongoose.Schema({
     voterMatric: {
         type: String,
         required: true,
-        index: true,
+        index: true
     },
-    // This will store an array of choices, e.g., [{ categoryId: 'influential-male', nomineeName: 'John Doe' }]
+    // This correctly stores an array of choices from a single submission,
+    // e.g., all the "Finalist" votes are stored in one document.
     choices: [{
         categoryId: String,
-        nomineeName: String,
+        nomineeName: String
     }],
     castAt: {
         type: Date,
-        default: Date.now,
-    },
-});
+        default: Date.now
+    }
+})
 
-module.exports = mongoose.model('Vote', VoteSchema);
+module.exports = mongoose.model('Vote', voteSchema)
