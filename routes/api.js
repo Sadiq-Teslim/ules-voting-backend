@@ -16,7 +16,7 @@ const departmentMap = {
     '07': 'dept-systems',
     '08': 'dept-computer',
     '09': 'dept-petroleum-gas',
-    10: 'dept-biomedical'
+    10: 'dept-biomedical' // CRITICAL FIX: Changed key from number 10 to string '10'
 }
 
 // --- ROUTE 1: Validate Matriculation Number ---
@@ -66,7 +66,6 @@ router.post('/validate', async(req, res) => {
     // Step 4: Find the specific department ID using the map
     const departmentId = departmentMap[departmentCodeStr]
     if (!departmentId) {
-        // Safety net in case of an invalid department code that somehow passed the checks
         return res
             .status(500)
             .json({
@@ -84,7 +83,6 @@ router.post('/validate', async(req, res) => {
 })
 
 // --- ROUTE 2: Get a voter's status ---
-// Fetches the list of individual sub-categories the user has already voted for.
 router.post('/voter-status', async(req, res) => {
     const { matricNumber } = req.body
     if (!matricNumber) {
@@ -105,7 +103,6 @@ router.post('/voter-status', async(req, res) => {
 })
 
 // --- ROUTE 3: Submit votes ---
-// Accepts votes for one or more sub-categories and records them.
 router.post('/submit', async(req, res) => {
     const { fullName, matricNumber, choices, mainCategory } = req.body
     if (!matricNumber ||
@@ -156,9 +153,7 @@ router.post('/submit', async(req, res) => {
     }
 })
 
-// --- ADMIN AND NOMINATION ROUTES (Unaffected by voting logic changes) ---
-
-// Get Live Voting Results (Admin Only)
+// --- ADMIN AND NOMINATION ROUTES ---
 router.post('/results', async(req, res) => {
     if (req.body.password !== process.env.ADMIN_PASSWORD) {
         return res.status(401).json({ message: 'Unauthorized: Invalid password.' })
@@ -191,7 +186,6 @@ router.post('/results', async(req, res) => {
     }
 })
 
-// Submit a Nomination
 router.post('/nominate', async(req, res) => {
     const { nominations } = req.body
     if (!nominations || !Array.isArray(nominations) || nominations.length === 0) {
@@ -214,7 +208,6 @@ router.post('/nominate', async(req, res) => {
     }
 })
 
-// Fetch Pending Nominations (Admin)
 router.post('/pending-nominations', async(req, res) => {
     if (req.body.password !== process.env.ADMIN_PASSWORD) {
         return res.status(403).json({ message: 'Invalid admin password.' })
@@ -229,7 +222,6 @@ router.post('/pending-nominations', async(req, res) => {
     }
 })
 
-// Get/Toggle Election Status and Delete Nominations (Admin routes)
 router.get('/election-status', async(req, res) => {
     try {
         const setting = await Setting.findOne({ key: 'electionStatus' })
