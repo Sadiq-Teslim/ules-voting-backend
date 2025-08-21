@@ -38,12 +38,20 @@ router.post('/validate', async(req, res) => {
     const departmentCode = parseInt(departmentCodeStr, 10)
 
     // Step 3: Check rules
-    if (year < 16 || year > 24) {
+    if (year < 18 || year > 24) {
         return res
             .status(400)
             .json({
                 valid: false,
-                message: 'This platform is for students admitted between 2016 and 2024.'
+                message: 'This platform is for students admitted between 2018 and 2024.'
+            })
+    }
+    if (year === 20 || year === 22) {
+        return res
+            .status(400)
+            .json({
+                valid: false,
+                message: 'Invalid Matriculation Number.'
             })
     }
     if (faculty !== 4) {
