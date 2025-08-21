@@ -39,47 +39,37 @@ router.post('/validate', async(req, res) => {
 
     // Step 3: Check rules
     if (year < 18 || year > 24) {
-        return res
-            .status(400)
-            .json({
-                valid: false,
-                message: 'This platform is for students admitted between 2018 and 2024.'
-            })
+        return res.status(400).json({
+            valid: false,
+            message: 'This platform is for students admitted between 2018 and 2024.'
+        })
     }
     if (year === 20 || year === 22) {
-        return res
-            .status(400)
-            .json({
-                valid: false,
-                message: 'Invalid Matriculation Number.'
-            })
+        return res.status(400).json({
+            valid: false,
+            message: 'Invalid Matriculation Number.'
+        })
     }
     if (faculty !== 4) {
-        return res
-            .status(400)
-            .json({
-                valid: false,
-                message: 'This does not belong to the Faculty of Engineering.'
-            })
+        return res.status(400).json({
+            valid: false,
+            message: 'This does not belong to the Faculty of Engineering.'
+        })
     }
     if (departmentCode < 1 || departmentCode > 10) {
-        return res
-            .status(400)
-            .json({
-                valid: false,
-                message: 'Invalid department code for Engineering.'
-            })
+        return res.status(400).json({
+            valid: false,
+            message: 'Invalid department code for Engineering.'
+        })
     }
 
     // Step 4: Find the specific department ID using the map
     const departmentId = departmentMap[departmentCodeStr]
     if (!departmentId) {
-        return res
-            .status(500)
-            .json({
-                valid: false,
-                message: 'Could not resolve department. Please contact support.'
-            })
+        return res.status(500).json({
+            valid: false,
+            message: 'Could not resolve department. Please contact support.'
+        })
     }
 
     // A user can always log in if their matric is valid. The UI will show their progress.
@@ -134,11 +124,9 @@ router.post('/submit', async(req, res) => {
         )
 
         if (hasAlreadyVotedForOne) {
-            return res
-                .status(403)
-                .json({
-                    message: 'Your submission includes a category you have already voted for.'
-                })
+            return res.status(403).json({
+                message: 'Your submission includes a category you have already voted for.'
+            })
         }
 
         if (choices.length > 0) {
@@ -203,12 +191,10 @@ router.post('/nominate', async(req, res) => {
     }
     try {
         await Nomination.insertMany(nominations)
-        res
-            .status(201)
-            .json({
-                success: true,
-                message: 'Your nomination(s) have been submitted for review!'
-            })
+        res.status(201).json({
+            success: true,
+            message: 'Your nomination(s) have been submitted for review!'
+        })
     } catch (error) {
         res
             .status(500)
@@ -257,14 +243,44 @@ router.post('/delete-nominations', async(req, res) => {
         return res.status(403).json({ message: 'Invalid admin password.' })
     try {
         const { deletedCount } = await Nomination.deleteMany({})
-        res
-            .status(200)
-            .json({
-                success: true,
-                message: `${deletedCount} nominations have been deleted.`
-            })
+        res.status(200).json({
+            success: true,
+            message: `${deletedCount} nominations have been deleted.`
+        })
     } catch (error) {
         res.status(500).json({ message: 'Server error.' })
+    }
+})
+
+router.post('/reset-election', async(req, res) => {
+    // 1. SECURITY: Check for the admin password
+    const { password } = req.body
+    if (password !== process.env.ADMIN_PASSWORD) {
+        return res.status(403).json({ message: 'Invalid admin password.' })
+    }
+
+    try {
+        // 2. Delete all documents from the 'votes' collection
+        const voteDeletionResult = await Vote.deleteMany({})
+
+        // 3. Delete all documents from the 'voters' collection
+        const voterDeletionResult = await Voter.deleteMany({})
+
+        const message = `Election has been reset. Deleted ${voteDeletionResult.deletedCount} vote records and ${voterDeletionResult.deletedCount} voter records.`
+        console.log(message) // Log this important action on the server
+
+        // 4. Send a success response to the frontend
+        res.status(200).json({
+            success: true,
+            message: message
+        })
+    } catch (error) {
+        console.error('Error resetting election:', error)
+        res
+            .status(500)
+            .json({
+                message: 'A server error occurred while resetting the election.'
+            })
     }
 })
 
