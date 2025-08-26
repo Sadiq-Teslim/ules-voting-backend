@@ -16,7 +16,7 @@ const departmentMap = {
     '07': 'dept-systems',
     '08': 'dept-computer',
     '09': 'dept-petroleum-gas',
-    10: 'dept-biomedical' // CRITICAL FIX: Changed key from number 10 to string '10'
+    '10': 'dept-biomedical ',
 }
 
 // --- ROUTE 1: Validate Matriculation Number ---
@@ -36,6 +36,7 @@ router.post('/validate', async(req, res) => {
     const faculty = parseInt(matricNumber.substring(2, 4), 10)
     const departmentCodeStr = matricNumber.substring(4, 6) // Keep as a string '0X' for the map key
     const departmentCode = parseInt(departmentCodeStr, 10)
+    const studentNumber = parseInt(matricNumber.substring(6, 9), 10);
 
     // Step 3: Check rules
     if (year < 18 || year > 24) {
@@ -50,10 +51,10 @@ router.post('/validate', async(req, res) => {
             message: 'Invalid Matriculation Number.'
         })
     }
-    if (faculty !== 4) {
+    if (faculty !== '04') {
         return res.status(400).json({
             valid: false,
-            message: 'This does not belong to the Faculty of Engineering.'
+            message: 'This matric number does not belong to the Faculty of Engineering.'
         })
     }
     if (departmentCode < 1 || departmentCode > 10) {
@@ -62,7 +63,16 @@ router.post('/validate', async(req, res) => {
             message: 'Invalid department code for Engineering.'
         })
     }
+    // --- NEW: Step 4: Check student number rules (Regular vs. Direct Entry) ---
+    const isDirectEntry = studentNumber >= 500;
+    const isRegularStudent = studentNumber >= 1 && studentNumber <= 180;
 
+    if (!isDirectEntry && !isRegularStudent) {
+        return res.status(400).json({
+            valid: false,
+            message: 'Invalid matriculation number.'
+        });
+    }
     // Step 4: Find the specific department ID using the map
     const departmentId = departmentMap[departmentCodeStr]
     if (!departmentId) {
