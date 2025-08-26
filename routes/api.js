@@ -16,7 +16,7 @@ const departmentMap = {
     '07': 'dept-systems',
     '08': 'dept-computer',
     '09': 'dept-petroleum-gas',
-    '10': 'dept-biomedical ',
+    '10': 'dept-biomedical',
 }
 
 // --- ROUTE 1: Validate Matriculation Number ---
@@ -51,7 +51,7 @@ router.post('/validate', async(req, res) => {
             message: 'Invalid Matriculation Number.'
         })
     }
-    if (faculty !== '04') {
+    if (faculty !== 4) {
         return res.status(400).json({
             valid: false,
             message: 'This matric number does not belong to the Faculty of Engineering.'
