@@ -3,11 +3,7 @@
 const mongoose = require('mongoose')
 
 const voteSchema = new mongoose.Schema({
-    voterEmail: {
-        type: String,
-        required: true,
-        index: true
-    },
+    // voterEmail removed, now IP-based only
     ipAddress: {
         type: String,
         required: true,

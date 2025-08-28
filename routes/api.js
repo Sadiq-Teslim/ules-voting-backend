@@ -19,15 +19,12 @@ const departmentMap = {
     '10': 'dept-biomedical',
 }
 
-// --- ROUTE 1: Validate Email and Department ---
-// This is the gatekeeper. It validates the email and department.
+// --- ROUTE 1: Validate Department Only ---
 router.post('/validate', async(req, res) => {
-    const { email, department } = req.body;
-    if (!email || !department) {
-        return res.status(400).json({ valid: false, message: 'Email and department are required.' });
+    const { department } = req.body;
+    if (!department) {
+        return res.status(400).json({ valid: false, message: 'Department is required.' });
     }
-    // Optionally, add email format validation here
-    // Optionally, check department against allowed list
     res.status(200).json({
         valid: true,
         message: 'Validation successful. You can proceed to vote.',
@@ -37,55 +34,38 @@ router.post('/validate', async(req, res) => {
 
 // --- ROUTE 2: Get a voter's status ---
 router.post('/voter-status', async(req, res) => {
-    const { email } = req.body;
-    if (!email) {
-        return res.status(400).json({ message: 'Email is required.' });
-    }
-    try {
-        const voter = await Voter.findOne({ email });
-        res.status(200).json({ votedSubCategoryIds: voter ? voter.votedSubCategoryIds : [] });
-    } catch (error) {
-        res.status(500).json({ message: 'Server error while fetching voter status.' });
-    }
+    // IP-based only, no email
+    res.status(200).json({ votedSubCategoryIds: [] });
 });
 
 // --- ROUTE 3: Submit votes ---
 router.post('/submit', async(req, res) => {
-    const { fullName, email, department, choices, mainCategory } = req.body;
-    if (!email || !fullName || !department || !choices || !Array.isArray(choices) || !mainCategory) {
+    const { fullName, department, choices, mainCategory } = req.body;
+    if (!fullName || !department || !choices || !Array.isArray(choices) || !mainCategory) {
         return res.status(400).json({ message: 'Invalid submission data.' });
     }
     try {
         // Get IP address from request
         const ipAddress = req.headers['x-forwarded-for']?.split(',')[0] || req.connection.remoteAddress || req.ip;
 
-        let voter = await Voter.findOne({ email });
-        if (!voter) {
-            voter = new Voter({ email, fullName, department, votedSubCategoryIds: [] });
-        }
         const incomingSubCategoryIds = choices.map(choice => choice.categoryId);
-        const hasAlreadyVotedForOne = incomingSubCategoryIds.some(id =>
-            voter.votedSubCategoryIds.includes(id)
-        );
         // Check if this IP has already voted for any of these awards
         const ipVotedForOne = await Vote.findOne({
             ipAddress,
             'choices.categoryId': { $in: incomingSubCategoryIds }
         });
-        if (hasAlreadyVotedForOne || ipVotedForOne) {
+        if (ipVotedForOne) {
             return res.status(403).json({
-                message: 'Your submission includes a category you have already voted for (by email or IP).'
+                message: 'Your submission includes a category you have already voted for (by IP).'
             });
         }
         if (choices.length > 0) {
-            await new Vote({ voterEmail: email, ipAddress, choices }).save();
+            await new Vote({ ipAddress, choices }).save();
         }
-        voter.votedSubCategoryIds.push(...incomingSubCategoryIds);
-        await voter.save();
         res.status(201).json({
             success: true,
             message: `Your votes for the ${mainCategory} category have been recorded!`,
-            votedSubCategoryIds: voter.votedSubCategoryIds
+            votedSubCategoryIds: []
         });
     } catch (error) {
         console.error('Vote submission error:', error);
