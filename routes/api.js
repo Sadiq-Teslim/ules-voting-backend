@@ -56,6 +56,9 @@ router.post('/submit', async(req, res) => {
         return res.status(400).json({ message: 'Invalid submission data.' });
     }
     try {
+        // Get IP address from request
+        const ipAddress = req.headers['x-forwarded-for']?.split(',')[0] || req.connection.remoteAddress || req.ip;
+
         let voter = await Voter.findOne({ email });
         if (!voter) {
             voter = new Voter({ email, fullName, department, votedSubCategoryIds: [] });
@@ -64,13 +67,18 @@ router.post('/submit', async(req, res) => {
         const hasAlreadyVotedForOne = incomingSubCategoryIds.some(id =>
             voter.votedSubCategoryIds.includes(id)
         );
-        if (hasAlreadyVotedForOne) {
+        // Check if this IP has already voted for any of these awards
+        const ipVotedForOne = await Vote.findOne({
+            ipAddress,
+            'choices.categoryId': { $in: incomingSubCategoryIds }
+        });
+        if (hasAlreadyVotedForOne || ipVotedForOne) {
             return res.status(403).json({
-                message: 'Your submission includes a category you have already voted for.'
+                message: 'Your submission includes a category you have already voted for (by email or IP).'
             });
         }
         if (choices.length > 0) {
-            await new Vote({ voterEmail: email, choices }).save();
+            await new Vote({ voterEmail: email, ipAddress, choices }).save();
         }
         voter.votedSubCategoryIds.push(...incomingSubCategoryIds);
         await voter.save();

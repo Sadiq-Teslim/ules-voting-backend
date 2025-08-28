@@ -8,8 +8,11 @@ const voteSchema = new mongoose.Schema({
         required: true,
         index: true
     },
-    // This correctly stores an array of choices from a single submission,
-    // e.g., all the "Finalist" votes are stored in one document.
+    ipAddress: {
+        type: String,
+        required: true,
+        index: true
+    },
     choices: [{
         categoryId: String,
         nomineeName: String
