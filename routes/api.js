@@ -19,145 +19,71 @@ const departmentMap = {
     '10': 'dept-biomedical',
 }
 
-// --- ROUTE 1: Validate Matriculation Number ---
-// This is the gatekeeper. It validates the number's structure and returns the user's specific departmentId.
+// --- ROUTE 1: Validate Email and Department ---
+// This is the gatekeeper. It validates the email and department.
 router.post('/validate', async(req, res) => {
-    const { matricNumber } = req.body
-
-    // Step 1: Basic format validation
-    if (!matricNumber || !/^\d{9}$/.test(matricNumber)) {
-        return res
-            .status(400)
-            .json({ valid: false, message: 'Invalid matriculation number format.' })
+    const { email, department } = req.body;
+    if (!email || !department) {
+        return res.status(400).json({ valid: false, message: 'Email and department are required.' });
     }
-
-    // Step 2: Extract parts for validation
-    const year = parseInt(matricNumber.substring(0, 2), 10)
-    const faculty = parseInt(matricNumber.substring(2, 4), 10)
-    const departmentCodeStr = matricNumber.substring(4, 6) // Keep as a string '0X' for the map key
-    const departmentCode = parseInt(departmentCodeStr, 10)
-    const studentNumber = parseInt(matricNumber.substring(6, 9), 10);
-
-    // Step 3: Check rules
-    if (year < 18 || year > 24) {
-        return res.status(400).json({
-            valid: false,
-            message: 'This platform is for students admitted between 2018 and 2024.'
-        })
-    }
-    if (year === 20 || year === 22) {
-        return res.status(400).json({
-            valid: false,
-            message: 'Invalid Matriculation Number.'
-        })
-    }
-    if (faculty !== 4) {
-        return res.status(400).json({
-            valid: false,
-            message: 'This matric number does not belong to the Faculty of Engineering.'
-        })
-    }
-    if (departmentCode < 1 || departmentCode > 10) {
-        return res.status(400).json({
-            valid: false,
-            message: 'Invalid department code for Engineering.'
-        })
-    }
-    // --- NEW: Step 4: Check student number rules (Regular vs. Direct Entry) ---
-    const isDirectEntry = studentNumber >= 500;
-    const isRegularStudent = studentNumber >= 1 && studentNumber <= 180;
-
-    if (!isDirectEntry && !isRegularStudent) {
-        return res.status(400).json({
-            valid: false,
-            message: 'Invalid matriculation number.'
-        });
-    }
-    // Step 4: Find the specific department ID using the map
-    const departmentId = departmentMap[departmentCodeStr]
-    if (!departmentId) {
-        return res.status(500).json({
-            valid: false,
-            message: 'Could not resolve department. Please contact support.'
-        })
-    }
-
-    // A user can always log in if their matric is valid. The UI will show their progress.
+    // Optionally, add email format validation here
+    // Optionally, check department against allowed list
     res.status(200).json({
         valid: true,
         message: 'Validation successful. You can proceed to vote.',
-        departmentId: departmentId // Send the crucial departmentId to the frontend
-    })
-})
+        departmentId: department
+    });
+});
 
 // --- ROUTE 2: Get a voter's status ---
 router.post('/voter-status', async(req, res) => {
-    const { matricNumber } = req.body
-    if (!matricNumber) {
-        return res
-            .status(400)
-            .json({ message: 'Matriculation number is required.' })
+    const { email } = req.body;
+    if (!email) {
+        return res.status(400).json({ message: 'Email is required.' });
     }
     try {
-        const voter = await Voter.findOne({ matricNumber })
-        res
-            .status(200)
-            .json({ votedSubCategoryIds: voter ? voter.votedSubCategoryIds : [] })
+        const voter = await Voter.findOne({ email });
+        res.status(200).json({ votedSubCategoryIds: voter ? voter.votedSubCategoryIds : [] });
     } catch (error) {
-        res
-            .status(500)
-            .json({ message: 'Server error while fetching voter status.' })
+        res.status(500).json({ message: 'Server error while fetching voter status.' });
     }
-})
+});
 
 // --- ROUTE 3: Submit votes ---
 router.post('/submit', async(req, res) => {
-    const { fullName, matricNumber, choices, mainCategory } = req.body
-    if (!matricNumber ||
-        !fullName ||
-        !choices ||
-        !Array.isArray(choices) ||
-        !mainCategory
-    ) {
-        return res.status(400).json({ message: 'Invalid submission data.' })
+    const { fullName, email, department, choices, mainCategory } = req.body;
+    if (!email || !fullName || !department || !choices || !Array.isArray(choices) || !mainCategory) {
+        return res.status(400).json({ message: 'Invalid submission data.' });
     }
-
     try {
-        let voter = await Voter.findOne({ matricNumber })
+        let voter = await Voter.findOne({ email });
         if (!voter) {
-            voter = new Voter({ matricNumber, fullName, votedSubCategoryIds: [] })
+            voter = new Voter({ email, fullName, department, votedSubCategoryIds: [] });
         }
-
-        const incomingSubCategoryIds = choices.map(choice => choice.categoryId)
+        const incomingSubCategoryIds = choices.map(choice => choice.categoryId);
         const hasAlreadyVotedForOne = incomingSubCategoryIds.some(id =>
             voter.votedSubCategoryIds.includes(id)
-        )
-
+        );
         if (hasAlreadyVotedForOne) {
             return res.status(403).json({
                 message: 'Your submission includes a category you have already voted for.'
-            })
+            });
         }
-
         if (choices.length > 0) {
-            await new Vote({ voterMatric: matricNumber, choices }).save()
+            await new Vote({ voterEmail: email, choices }).save();
         }
-
-        voter.votedSubCategoryIds.push(...incomingSubCategoryIds)
-        await voter.save()
-
+        voter.votedSubCategoryIds.push(...incomingSubCategoryIds);
+        await voter.save();
         res.status(201).json({
             success: true,
             message: `Your votes for the ${mainCategory} category have been recorded!`,
             votedSubCategoryIds: voter.votedSubCategoryIds
-        })
+        });
     } catch (error) {
-        console.error('Vote submission error:', error)
-        res
-            .status(500)
-            .json({ message: 'A server error occurred while submitting your vote.' })
+        console.error('Vote submission error:', error);
+        res.status(500).json({ message: 'A server error occurred while submitting your vote.' });
     }
-})
+});
 
 // --- ADMIN AND NOMINATION ROUTES ---
 router.post('/results', async(req, res) => {

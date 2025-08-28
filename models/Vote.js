@@ -3,7 +3,7 @@
 const mongoose = require('mongoose')
 
 const voteSchema = new mongoose.Schema({
-    voterMatric: {
+    voterEmail: {
         type: String,
         required: true,
         index: true

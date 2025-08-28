@@ -2,9 +2,9 @@
 const mongoose = require('mongoose')
 
 const voterSchema = new mongoose.Schema({
-    matricNumber: { type: String, required: true, unique: true, index: true },
+    email: { type: String, required: true, unique: true, index: true },
     fullName: { type: String, required: true },
-    // CRITICAL CHANGE: We now store an array of individual award IDs that have been voted for.
+    department: { type: String, required: true },
     votedSubCategoryIds: [{
         type: String // Will store 'ug-most-beautiful', 'gen-social-impact-award', etc.
     }]
